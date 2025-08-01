@@ -4,7 +4,7 @@ import pygame
 import math
 import random
 
-# NOVO: Fator de escala para a imagem de alta resolução
+
 SCALE_FACTOR = 5
 
 class RRTMap:
@@ -17,7 +17,7 @@ class RRTMap:
         self.map = pygame.display.set_mode((self.map_w, self.map_h))
         self.map.fill((255, 255, 255))
 
-        # NOVO: Superfície de alta resolução para salvar (invisível)
+       
         self.hires_w = self.map_w * SCALE_FACTOR
         self.hires_h = self.map_h * SCALE_FACTOR
         self.hires_map = pygame.Surface((self.hires_w, self.hires_h))
@@ -61,7 +61,7 @@ class RRTMap:
         self.map.blit(scaled_down_map, (0, 0))
         pygame.display.update()
 
-# ... (Classe RRTGraph sem alterações) ...
+
 class RRTGraph:
     def __init__(self, start, goal, map_dimensions, obstacles):
         self.start, self.goal = start, goal
@@ -159,24 +159,11 @@ def find_rrt_path(config):
             graph.path_to_goal()
             path = graph.get_path_coords()
             rrt_map.draw_path(path) # Desenha o caminho final
-            rrt_map.update_display() # Atualiza a tela uma última vez
             
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            # MODIFICADO: Salva a superfície de alta resolução em formato PNG
             filename = f"rrt_plan_{timestamp}.png"
             pygame.image.save(rrt_map.hires_map, filename)
             print(f"Plano do RRT salvo como '{filename}'")
-            
-            # ... (código da pausa com a tecla ESPAÇO sem alterações) ...
-            pygame.display.set_caption("Caminho Encontrado! Pressione ESPAÇO para continuar.")
-            waiting = True
-            while waiting:
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit(); return None, None
-                    if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                        waiting = False
-                clock.tick(30)
             
             return rrt_map, path
         

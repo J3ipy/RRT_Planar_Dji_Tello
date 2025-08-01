@@ -11,8 +11,9 @@ class TelloManager:
         self.cancel = threading.Event()
         self.x = self.y = self.z = self.angle = self.speed = 0
         
-        # NOVO: Lista para guardar o histórico de posições
+        # Lista para armazenar o histórico de posições.
         self.path_history = []
+        self.current_waypoint_index = 0
 
     def _feedback(self):
         while not self.stop_fb.is_set():
@@ -49,12 +50,14 @@ class TelloManager:
             
             # Inicializa a odometria e o histórico
             self.x, self.y = path[0]
-            self.path_history = [(self.x, self.y)] # NOVO: Começa o histórico com o ponto inicial
+            self.path_history = [(self.x, self.y)]
+            self.current_waypoint_index = 0
 
             for i in range(len(path) - 1):
                 if self.cancel.is_set():
                     print("\nVoo cancelado pelo usuário."); break
                 
+                self.current_waypoint_index = i + 1
                 p1, p2 = path[i], path[i+1]
                 dx, dy = p2[0] - p1[0], p2[1] - p1[1]
                 dist = math.hypot(dx, dy)
