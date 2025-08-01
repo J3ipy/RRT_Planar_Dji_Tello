@@ -1,0 +1,133 @@
+import time
+import math
+import threading
+from djitellopy import Tello
+
+class TelloManager:
+    def __init__(self):
+        self.tello = Tello()
+        self.is_flying = False
+        self.stop_event = threading.Event() # Evento único para parar todas as threads
+        self.cancel = self.stop_event # Reutiliza o mesmo evento para cancelamento
+        
+        # Variáveis de estado
+        self.x = self.y = self.z = self.angle = self.speed = 0
+        self.path_history = []
+        self.current_waypoint_index = 0
+        self.last_update_time = 0
+
+    def _state_updater(self):
+        """
+        NOVO: Thread de alta frequência que substitui o antigo _feedback.
+        Ela lê a velocidade real do drone e integra para estimar a posição.
+        Isso garante que a odometria e o plot sejam atualizados continuamente.
+        """
+        self.last_update_time = time.time()
+
+        while not self.stop_event.is_set():
+            try:
+                # Calcula o tempo decorrido (delta time) desde a última atualização
+                now = time.time()
+                dt = now - self.last_update_time
+                self.last_update_time = now
+
+                # Pega as velocidades do drone (cm/s)
+                # vgx = para frente, vgy = para a esquerda
+                vgx = self.tello.get_speed_x()
+                vgy = -self.tello.get_speed_y() # Invertemos para ter um sistema de coordenadas padrão (Y para a direita)
+
+                # --- Integração da Velocidade para Odometria ---
+                # Rotacionamos o vetor de velocidade (que está no referencial do drone)
+                # para o referencial do mundo, usando o ângulo de guinada (yaw) atual.
+                rad_angle = math.radians(self.angle)
+                world_vx = vgx * math.sin(rad_angle) + vgy * math.cos(rad_angle)
+                world_vy = vgx * math.cos(rad_angle) - vgy * math.sin(rad_angle)
+
+                # Atualiza a posição (distância = velocidade * tempo)
+                self.x += world_vx * dt
+                self.y += world_vy * dt
+                self.z = self.tello.get_height() # A altura é lida diretamente para maior precisão
+
+                # Adiciona o novo ponto ao histórico para os plotters
+                self.path_history.append((self.x, self.y, self.z))
+                
+                # Atualiza o feedback no console
+                self.speed = math.hypot(vgx, vgy)
+                print(f"Pos (x,y)=({self.x:.1f},{self.y:.1f}) | z={self.z}cm | v={self.speed:.1f}cm/s | Waypoint: {self.current_waypoint_index} ", end='\r')
+
+                time.sleep(1 / 20) # Roda a 20Hz para uma atualização suave
+
+            except Exception as e:
+                print(f"\nErro no state updater: {e}")
+                break
+        print("\nThread de atualização de estado finalizada.")
+
+    def execute_flight_plan(self, path, target_altitude):
+        state_updater_thread = None
+        try:
+            self.tello.connect()
+            bat = self.tello.get_battery()
+            print(f"Bateria: {bat}%")
+            if bat < 20:
+                print("Bateria baixa. Voo cancelado."); return
+
+            self.tello.takeoff()
+            self.is_flying = True
+            time.sleep(1)
+
+            h = self.tello.get_height()
+            if h > target_altitude:
+                self.tello.move_down(h - target_altitude)
+            time.sleep(2)
+            
+            # Inicializa a odometria e o histórico
+            self.x, self.y = path[0]
+            self.z = self.tello.get_height()
+            self.path_history = [(self.x, self.y, self.z)]
+            
+            # Inicia a nova thread de atualização de estado
+            state_updater_thread = threading.Thread(target=self._state_updater)
+            state_updater_thread.start()
+
+            for i in range(len(path) - 1):
+                if self.cancel.is_set():
+                    print("\nVoo cancelado pelo usuário."); break
+                
+                self.current_waypoint_index = i + 1
+                p1, p2 = path[i], path[i+1]
+                dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+                dist = math.hypot(dx, dy)
+                target = math.degrees(math.atan2(dx, dy))
+                rot = (target - self.angle + 180) % 360 - 180
+
+                if abs(rot) > 5:
+                    if rot > 0: self.tello.rotate_clockwise(int(rot))
+                    else: self.tello.rotate_counter_clockwise(int(-rot))
+                    self.angle += rot
+                    time.sleep(1) # Reduzido o tempo de espera
+                
+                if dist > 0 and not self.cancel.is_set():
+                    step = int(max(20, min(500, dist)))
+                    self.tello.move_forward(step)
+                    time.sleep(1) # Reduzido o tempo de espera
+
+            if not self.cancel.is_set():
+                print("\nPlano de voo completo!")
+        except Exception as e:
+            print(f"\nOcorreu um erro durante o voo: {e}")
+        finally:
+            self.is_flying = False # Garante que a thread pare
+            self.stop_event.set() # Sinaliza para a thread parar
+            if state_updater_thread and state_updater_thread.is_alive():
+                state_updater_thread.join()
+            
+            # A biblioteca pode ser um pouco instável no pouso, então tentamos de forma segura
+            try:
+                if self.tello.is_flying:
+                    print("Pousando..."); self.tello.land()
+            except Exception as e:
+                print(f"Não foi possível pousar automaticamente: {e}")
+
+
+
+Implementar no tello_handler.py

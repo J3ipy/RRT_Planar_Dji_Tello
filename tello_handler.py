@@ -50,7 +50,8 @@ class TelloManager:
             
             # Inicializa a odometria e o histórico
             self.x, self.y = path[0]
-            self.path_history = [(self.x, self.y)]
+            self.z = self.tello.get_height()
+            self.path_history = [(self.x, self.y, self.z)]
             self.current_waypoint_index = 0
 
             for i in range(len(path) - 1):
@@ -73,12 +74,13 @@ class TelloManager:
                 if dist > 0 and not self.cancel.is_set():
                     step = int(max(20, min(500, dist)))
                     self.tello.move_forward(step)
+
                     rad = math.radians(self.angle)
                     self.x += step * math.sin(rad)
                     self.y += step * math.cos(rad)
+                    self.z = self.tello.get_height()
                     
-                    # NOVO: Adiciona a nova posição ao histórico
-                    self.path_history.append((self.x, self.y))
+                    self.path_history.append((self.x, self.y, self.z))
                     time.sleep(2)
 
             if not self.cancel.is_set():
