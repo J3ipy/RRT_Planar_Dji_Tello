@@ -1,9 +1,7 @@
-# rrt_planner.py
 from datetime import datetime
 import pygame
 import math
 import random
-
 
 SCALE_FACTOR = 5
 
@@ -17,7 +15,7 @@ class RRTMap:
         self.map = pygame.display.set_mode((self.map_w, self.map_h))
         self.map.fill((255, 255, 255))
 
-       
+        # Superfície de alta resolução para salvar (invisível)
         self.hires_w = self.map_w * SCALE_FACTOR
         self.hires_h = self.map_h * SCALE_FACTOR
         self.hires_map = pygame.Surface((self.hires_w, self.hires_h))
@@ -39,7 +37,6 @@ class RRTMap:
             pygame.draw.rect(self.hires_map, self.grey, scaled_obs)
         
         # Copia a versão de alta resolução para a tela, ajustando o tamanho
-        # Isso garante que a visualização na tela também fique mais nítida (antialiasing)
         scaled_down_map = pygame.transform.smoothscale(self.hires_map, (self.map_w, self.map_h))
         self.map.blit(scaled_down_map, (0, 0))
 
@@ -69,26 +66,38 @@ class RRTGraph:
         self.obstacles = obstacles
         self.x, self.y, self.parent = [start[0]], [start[1]], [None]
         self.goal_flag, self.goal_state, self.path = False, None, []
+
     def number_of_nodes(self): return len(self.x)
     def distance(self, i, j): return math.hypot(self.x[i] - self.x[j], self.y[i] - self.y[j])
-    def sample_point(self): return random.randint(0, self.map_w), random.randint(0, self.map_h)
+    
+    def sample_point(self, safety_margin):
+        """ Sorteia um ponto aleatório DENTRO da margem de segurança. """
+        x = random.randint(safety_margin, self.map_w - safety_margin)
+        y = random.randint(safety_margin, self.map_h - safety_margin)
+        return x, y
+
     def nearest(self, idx):
         best, dmin = 0, self.distance(0, idx)
         for i in range(1, idx):
             d = self.distance(i, idx)
             if d < dmin: dmin, best = d, i
         return best
+
     def is_free(self, x, y): return all(not obs.collidepoint(x, y) for obs in self.obstacles)
+    
     def crosses_obstacle(self, x1, y1, x2, y2):
         for obs in self.obstacles:
             for t in [i / 100 for i in range(101)]:
                 x, y = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
                 if obs.collidepoint(x, y): return True
         return False
+
     def add_node(self, x, y, parent_idx):
         self.x.append(x); self.y.append(y); self.parent.append(parent_idx)
         return self.number_of_nodes() - 1
+
     def remove_last(self): self.x.pop(); self.y.pop(); self.parent.pop()
+    
     def step(self, near, idx, maxd):
         dx, dy = self.x[idx] - self.x[near], self.y[idx] - self.y[near]
         dist = math.hypot(dx, dy)
@@ -100,6 +109,7 @@ class RRTGraph:
             self.x[idx], self.y[idx] = self.goal
             self.goal_flag, self.goal_state = True, idx
         return idx
+    
     def connect(self, near, idx):
         if self.crosses_obstacle(self.x[near], self.y[near], self.x[idx], self.y[idx]):
             node_idx_to_remove = self.number_of_nodes() - 1
@@ -109,20 +119,24 @@ class RRTGraph:
             self.remove_last()
             return False
         return True
-    def expand(self, step_size):
-        xr, yr = self.sample_point()
+
+    # ATUALIZADO: O método expand agora aceita a margem de segurança
+    def expand(self, step_size, safety_margin):
+        xr, yr = self.sample_point(safety_margin)
         if not self.is_free(xr, yr): return None
         idx = self.add_node(xr, yr, None)
         near = self.nearest(idx)
         self.step(near, idx, maxd=step_size)
         if self.connect(near, idx): return idx, near
         return None
+
     def bias(self, step_size):
         idx = self.add_node(self.goal[0], self.goal[1], None)
         near = self.nearest(idx)
         self.step(near, idx, maxd=step_size)
         if self.connect(near, idx): return idx, near
         return None
+
     def path_to_goal(self):
         if not self.goal_flag or self.goal_state is None: return False
         self.path, node = [], self.goal_state
@@ -131,6 +145,7 @@ class RRTGraph:
             node = self.parent[node]
         self.path.reverse()
         return True
+
     def get_path_coords(self): return [(self.x[i], self.y[i]) for i in self.path]
 
 def find_rrt_path(config):
@@ -147,7 +162,11 @@ def find_rrt_path(config):
             if event.type == pygame.QUIT:
                 pygame.quit(); return None, None
 
-        result = graph.bias(config.RRT_STEP_SIZE) if i % 10 == 0 else graph.expand(config.RRT_STEP_SIZE)
+        # ATUALIZADO: A chamada para expand agora passa a margem de segurança
+        if i % 10 == 0:
+            result = graph.bias(config.RRT_STEP_SIZE)
+        else:
+            result = graph.expand(config.RRT_STEP_SIZE, config.SAFETY_MARGIN_CM)
         
         if result:
             last, near = result
@@ -161,11 +180,10 @@ def find_rrt_path(config):
             rrt_map.update_display()
             
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            filename = f"rrt_plan_inicial_{timestamp}.png" # Renomeado para clareza
+            filename = f"rrt_plan_inicial_{timestamp}.png"
             pygame.image.save(rrt_map.hires_map, filename)
             print(f"Plano do RRT salvo como '{filename}'")
             
-            # ADICIONADO DE VOLTA: Pausa para análise
             pygame.display.set_caption("Caminho Encontrado! Pressione ESPAÇO para continuar.")
             waiting = True
             while waiting:

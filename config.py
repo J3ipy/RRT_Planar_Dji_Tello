@@ -10,9 +10,10 @@ SCREEN_HEIGHT = 200
 START_POS = (20, 20)
 
 # Posição final (alvo).
-# Exemplo para um alvo a aprox. 160cm na diagonal do ponto inicial.
-# <<< AJUSTE ESTA COORDENADA PARA A POSIÇÃO REAL DO SEU ALVO.
+
 GOAL_POS = (133, 133)
+
+SAFETY_MARGIN_CM = 20
 
 # --- Lista de Obstáculos (x, y, largura, altura) ---
 # Os valores de X foram calculados com base nas suas medidas.

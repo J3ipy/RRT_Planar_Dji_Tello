@@ -1,4 +1,3 @@
-# tello_handler.py
 import time
 import math
 import threading
@@ -80,17 +79,16 @@ class TelloManager:
                 if dist > 0 and not self.cancel_event.is_set():
                     step = int(max(20, min(500, dist)))
                     
-                    # --- NOVO: Cálculo de velocidade média ---
+                    # --- Cálculo de velocidade média ---
                     t_start = time.time()
                     self.tello.move_forward(step)
                     t_end = time.time()
                     
                     duration = t_end - t_start
                     if duration > 0:
-                        speed = dist / duration # velocidade = distância / tempo
-                    # ----------------------------------------
+                        speed = dist / duration
                     
-                    time.sleep(1) # Pequena pausa
+                    time.sleep(1)
 
                 # Após cada movimento, calcula e envia o estado completo
                 self.angle = self.tello.get_yaw()
