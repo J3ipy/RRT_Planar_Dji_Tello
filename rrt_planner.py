@@ -140,7 +140,7 @@ def find_rrt_path(config):
     dims = (config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
     rrt_map = RRTMap(config.START_POS, config.GOAL_POS, dims)
     graph = RRTGraph(config.START_POS, config.GOAL_POS, dims, config.OBSTACLES)
-    rrt_map.draw_map(config.OBSTACLES) # Desenha o mapa inicial
+    rrt_map.draw_map(config.OBSTACLES)
 
     for i in range(config.RRT_MAX_ITERATIONS):
         for event in pygame.event.get():
@@ -151,24 +151,34 @@ def find_rrt_path(config):
         
         if result:
             last, near = result
-            # MODIFICADO: Chama o método de desenho da árvore
             rrt_map.draw_tree_updates(graph.x[last], graph.y[last], graph.x[near], graph.y[near])
         
         if graph.goal_flag:
             print(f"Caminho encontrado na iteração {i}!")
             graph.path_to_goal()
             path = graph.get_path_coords()
-            rrt_map.draw_path(path) # Desenha o caminho final
+            rrt_map.draw_path(path)
+            rrt_map.update_display()
             
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            filename = f"rrt_plan_{timestamp}.png"
+            filename = f"rrt_plan_inicial_{timestamp}.png" # Renomeado para clareza
             pygame.image.save(rrt_map.hires_map, filename)
             print(f"Plano do RRT salvo como '{filename}'")
+            
+            # ADICIONADO DE VOLTA: Pausa para análise
+            pygame.display.set_caption("Caminho Encontrado! Pressione ESPAÇO para continuar.")
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit(); return None, None
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                        waiting = False
+                clock.tick(30)
             
             return rrt_map, path
         
         if i % 5 == 0:
-            # MODIFICADO: Chama o método de atualização da tela
             rrt_map.update_display()
 
         clock.tick(60)
